@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guessing Game</title>
+   
+</head>
+<body>
+      <!--Adds a heading to the page-->
+    <h1>Welcome to the Guessing Game!</h1>
+
+
+    <!--Adds a html element that will display the number of players online-->
+    <h2 id="player-count">Players Online: 0</h2>
+
+<div id="lobby">
+ <input type="text" id="question-input" placeholder="Enter question for the round">
+ <input type="text" id="answer-input" placeholder="Enter your secret answer">
+ <input type="text" id="username" placeholder="Enter your username">
+ <input type="text" id="session-id" placeholder="Enter session ID">
+ <button id="joinBtn">Join Session</button>
+ <button id="createBtn">Create Session</button>
+ <h3>Players in Session:</h3> 
+ <ul id="player-list"></ul>
+ <button id="startBtn">Start Game</button>
+</div>
+
+<div id="game-screen" style="display: none;">
+<h2>Make Your Guess</h2>
+<h3 id="question-display">Question will appear here..</h3>
+<input type="text" id="guess-input" placeholder="Enter your guess">
+<button id="submitGuessBtn">Submit Guess</button>
+<p id="feedback"></p>
+
+  <h3>Scoreboard:</h3>
+    <ul id="scoreboard"></ul>
+</div>
+
+ <!--Ensures that the Socket.IO client library is loaded before your script runs-->
+ <script src="/socket.io/socket.io.js"></script>
+
+
+ <!-- Add a script to connect to the server and listen for the 'updateUserCount' event -->
+ <script>
+
+    //Connect to the server by creating a socket connection
+ const socket = io();
+
+   //Get the element to display the player count//
+ const countElement = document.getElementById('player-count');
+
+    //Listen for the updateUserCount event from the server//
+ socket.on('updateUserCount', (count) => {
+        countElement.textContent = `Players Online: ${count}`;
+    });
+
+
+    document.getElementById('joinBtn').addEventListener('click', () => {
+        const username = document.getElementById('username').value;
+        const sessionId = document.getElementById('session-id').value;
+
+        if (username && sessionId) {
+            // Emit an event to join the session
+            socket.emit('joinSession', { username, sessionId });
+        } else {
+            alert('Please enter both username and session ID.');
+        }
+    });
+    document.getElementById('createBtn').addEventListener('click', () => {
+        const username = document.getElementById('username').value;
+        const sessionId = document.getElementById('session-id').value;
+
+        if (username && sessionId) {
+            // Emit an event to create the session
+            socket.emit('createSession', { username, sessionId });
+        } else {
+            alert('Please enter both username and session ID.');
+        }
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        const sessionId = document.getElementById('session-id').value;
+        const question = document.getElementById('question-input').value;
+        const answer = document.getElementById('answer-input').value;
+       
+        if (sessionId && question && answer) {
+            socket.emit('startGame', { sessionId, question, answer });
+        } else {
+            alert('Please fill in all fields.');
+        }
+    });
+
+    socket.on('updatePlayerList', (players) => {
+        const list = document.getElementById('player-list');
+        list.innerHTML = players.map(player => `<li>${player}</li>`).join('');  
+    });
+
+socket.on('gameStarted', (data) => {
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game-screen').style.display = 'block';
+    document.getElementById('question-display').textContent = data.question;})
+   document.getElementById('submitGuessBtn').addEventListener('click', () => {
+    
+    const sessionId = document.getElementById('session-id').value;
+    const guessInput = document.getElementById('guess-input');
+    const guess = guessInput.value;
+
+
+    if (sessionId && guess) {
+        socket.emit('makeGuess', { sessionId, guess });
+        guessInput.value = '';
+    } else {
+        alert('Please enter a guess.');
+    }
+
+});
+
+
+    socket.on('guessResult', (data) => {
+        document.getElementById('feedback').textContent = data.message;
+    });
+
+socket.on('gameOver', (data) => {
+    const feedbackElement = document.getElementById('feedback');
+    
+    if (socket.id === data.winnerId){
+        document.getElementById('feedback').textContent = `You won! The answer was ${data.answer}`;
+    }
+    else{
+        document.getElementById('feedback').textContent = data.winnerName ? `${data.winnerName} won! The answer was ${data.answer}` : `Game over! The answer was ${data.answer}`;
+}
+
+    // Disable the guess button so no one else can keep guessing:
+    document.getElementById('submitGuessBtn').disabled = true;
+
+        if (data.scores) {
+        const scoreboard = document.getElementById('scoreboard');
+        scoreboard.innerHTML = Object.entries(data.scores)
+            .map(([player, score]) => `<li>${player}: ${score} pts</li>`)
+            .join('');
+    }
+    // --- NEXT ROUND NOTICE ---
+    if (data.newGameMaster) {
+        const nextRoundMsg = document.createElement('p');
+        nextRoundMsg.textContent = `Next round Game Master is: ${data.newGameMaster}!`;
+        document.getElementById('game-screen').appendChild(nextRoundMsg);
+        // If THIS player is the new Game Master, give them a button to return to lobby / create new round
+        const myUsername = document.getElementById('username').value;
+        if (myUsername === data.newGameMaster) {
+            const nextRoundBtn = document.createElement('button');
+            nextRoundBtn.textContent = 'Setup Next Question';
+            nextRoundBtn.onclick = () => {
+                document.getElementById('game-screen').style.display = 'none';
+                document.getElementById('lobby').style.display = 'block';
+                document.getElementById('submitGuessBtn').disabled = false;
+            };
+            document.getElementById('game-screen').appendChild(nextRoundBtn);
+        }
+    }
+
+
+});
+
+socket.on('errorMessage', (message) => 
+{ alert(message); 
+
+});
+
+
+
+ </script>
+
+
+
+</body>
+</html>
